@@ -1,0 +1,729 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>18-Draw Scoreboard</title>
+<style>
+  :root{
+    --paper:#F1F4EF;
+    --ink:#122622;
+    --muted:#5B6B63;
+    --court-green:#1F5C4D;
+    --court-blue:#26507A;
+    --clay:#B5502F;
+    --ball:#CFE84C;
+    --card:#FFFFFF;
+    --border:#D9E1DA;
+    --shadow: 0 1px 2px rgba(18,38,34,0.06), 0 4px 14px rgba(18,38,34,0.06);
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;}
+  body{
+    background:var(--paper);
+    color:var(--ink);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    min-height:100vh;
+  }
+  .num{ font-variant-numeric:tabular-nums; font-weight:800; letter-spacing:-0.02em; }
+  #app{max-width:1100px;margin:0 auto;padding:0 0 60px;}
+
+  header.top{
+    background:var(--ink); color:var(--paper); padding:18px 20px;
+    display:flex;align-items:center;justify-content:space-between;gap:12px;
+    position:sticky;top:0;z-index:20;
+  }
+  header.top .brand{display:flex;align-items:center;gap:10px;}
+  header.top .brand .dot{width:10px;height:10px;border-radius:50%;background:var(--ball);}
+  header.top .brand h1{font-size:16px;margin:0;letter-spacing:0.02em;text-transform:uppercase;font-weight:800;}
+  header.top .brand .sub{font-size:11px;color:#B9C7C1;margin-top:2px;}
+  .btn{border:none;border-radius:8px;padding:9px 14px;font-size:13px;font-weight:700;cursor:pointer;
+    transition:transform .08s ease;font-family:inherit;}
+  .btn:active{transform:scale(0.97);}
+  .btn-ghost{background:transparent;color:var(--paper);border:1px solid rgba(241,244,239,0.35);}
+  .btn-primary{background:var(--ball);color:#1E2A12;}
+  .btn-outline{background:transparent;color:var(--ink);border:1px solid var(--border);}
+  .btn:disabled{opacity:0.35;cursor:not-allowed;}
+
+  .sync-pill{font-size:10px;padding:4px 9px;border-radius:99px;text-transform:uppercase;letter-spacing:0.06em;font-weight:700;}
+  .sync-saved{background:rgba(207,232,76,0.18);color:#8DA028;}
+  .sync-saving{background:rgba(255,255,255,0.12);color:#B9C7C1;}
+  .sync-error{background:rgba(181,80,47,0.18);color:#D97A56;}
+
+  .wrap{padding:28px 20px;}
+  .eyebrow{font-size:11px;text-transform:uppercase;letter-spacing:0.12em;color:var(--muted);font-weight:700;margin:0 0 6px;}
+  h2{margin:0 0 4px;font-size:24px;}
+  p.lead{color:var(--muted);font-size:14px;margin:0 0 22px;max-width:560px;}
+  .card{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:20px;box-shadow:var(--shadow);}
+  .grid18{display:grid;grid-template-columns:repeat(2,1fr);gap:10px;margin:16px 0 22px;}
+  @media(max-width:560px){.grid18{grid-template-columns:1fr;}}
+  .seed-row{display:flex;align-items:center;gap:10px;}
+  .seed-badge{width:30px;height:30px;border-radius:8px;background:var(--paper);border:1px solid var(--border);
+    display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:800;color:var(--muted);flex:none;}
+  .seed-badge.playin{background:rgba(181,80,47,0.12);color:var(--clay);border-color:transparent;}
+  input[type=text],input[type=password]{width:100%;padding:10px 12px;border:1px solid var(--border);border-radius:8px;
+    font-size:14px;font-family:inherit;background:#fff;color:var(--ink);}
+  input:focus{outline:2px solid var(--court-blue);outline-offset:1px;}
+  label.field-label{font-size:12px;font-weight:700;color:var(--muted);display:block;margin:0 0 6px;}
+  .field{margin-bottom:16px;}
+  .hint{font-size:12px;color:var(--muted);margin-top:6px;}
+  .error-banner{background:rgba(181,80,47,0.1);border:1px solid rgba(181,80,47,0.3);color:var(--clay);
+    padding:10px 12px;border-radius:8px;font-size:13px;margin-bottom:14px;}
+
+  .rounds-scroll{display:flex;gap:18px;overflow-x:auto;padding:6px 2px 18px;}
+  .round-col{min-width:230px;flex:none;}
+  .round-title{font-size:11px;text-transform:uppercase;letter-spacing:0.1em;font-weight:800;color:var(--muted);
+    margin:0 0 10px;padding-bottom:8px;border-bottom:2px solid var(--border);}
+  .match-card{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:12px;margin-bottom:14px;
+    cursor:pointer;box-shadow:var(--shadow);transition:border-color .1s ease;}
+  .match-card:hover{border-color:var(--court-blue);}
+  .match-card .fmt-tag{font-size:9px;text-transform:uppercase;letter-spacing:0.08em;font-weight:800;color:var(--muted);
+    margin-bottom:8px;display:flex;align-items:center;gap:6px;}
+  .live-dot{width:7px;height:7px;border-radius:50%;background:var(--clay);display:inline-block;animation:pulse 1.4s infinite;}
+  @keyframes pulse{0%,100%{opacity:1;}50%{opacity:0.3;}}
+  .p-row{display:flex;justify-content:space-between;align-items:center;padding:4px 0;font-size:13.5px;}
+  .p-row.win .p-name{font-weight:800;}
+  .p-row .p-name.tbd{color:var(--muted);font-style:italic;}
+  .p-row .p-score{font-size:13px;color:var(--muted);}
+  .p-row.win .p-score{color:var(--ink);font-weight:800;}
+
+  .back-link{background:none;border:none;color:var(--court-blue);font-weight:700;font-size:13px;cursor:pointer;
+    padding:6px 0;margin-bottom:10px;font-family:inherit;}
+  .match-head{display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:10px;margin-bottom:18px;}
+  .fmt-pill{display:inline-block;font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:0.05em;
+    padding:5px 10px;border-radius:99px;}
+  .fmt-pill.fast4{background:rgba(38,80,122,0.12);color:var(--court-blue);}
+  .fmt-pill.trad{background:rgba(181,80,47,0.12);color:var(--clay);}
+
+  .scoreboard{background:var(--ink);color:var(--paper);border-radius:14px;padding:20px;margin-bottom:18px;}
+  .sb-players{display:grid;grid-template-columns:1fr auto;gap:8px 14px;align-items:center;}
+  .sb-name{font-size:16px;font-weight:700;}
+  .sb-name .seed{color:#8FA39B;font-weight:400;font-size:12px;margin-right:6px;}
+  .sb-sets{display:flex;gap:8px;}
+  .sb-set-box{width:34px;height:38px;border-radius:6px;background:rgba(255,255,255,0.08);
+    display:flex;align-items:center;justify-content:center;font-size:16px;}
+  .sb-set-box.current{background:var(--ball);color:#1E2A12;}
+  .sb-divider{height:1px;background:rgba(255,255,255,0.12);margin:14px 0;}
+  .sb-live-label{font-size:11px;text-transform:uppercase;letter-spacing:0.1em;color:#8FA39B;margin-bottom:8px;font-weight:700;}
+  .sb-live-score{font-size:34px;text-align:center;padding:6px 0;}
+  .sb-live-sub{text-align:center;font-size:12px;color:#8FA39B;margin-top:2px;}
+  .sb-note{background:rgba(255,255,255,0.06);border-radius:8px;padding:10px 12px;font-size:12px;color:#C9D6D0;margin-top:12px;line-height:1.5;}
+
+  .winner-banner{background:rgba(31,92,77,0.1);border:1px solid rgba(31,92,77,0.35);color:var(--court-green);
+    padding:12px 14px;border-radius:10px;font-weight:800;font-size:14px;margin-bottom:16px;display:flex;align-items:center;gap:8px;}
+
+  .point-controls{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px;}
+  .point-btn{padding:16px 10px;border-radius:12px;border:1px solid var(--border);background:#fff;
+    font-family:inherit;font-weight:800;font-size:14px;cursor:pointer;text-align:center;line-height:1.3;}
+  .point-btn:active{transform:scale(0.98);}
+  .point-btn small{display:block;font-weight:600;font-size:11px;color:var(--muted);margin-top:3px;text-transform:uppercase;letter-spacing:0.05em;}
+  .lock-msg{text-align:center;color:var(--muted);font-size:13px;padding:16px;border:1px dashed var(--border);border-radius:10px;margin-bottom:12px;}
+  .row-actions{display:flex;gap:10px;justify-content:flex-end;margin-top:6px;}
+  .rules-box{margin-top:20px;}
+  .rules-box summary{cursor:pointer;font-weight:700;font-size:13px;color:var(--muted);}
+  .rules-box[open] summary{margin-bottom:8px;}
+  .rules-box ul{margin:0;padding-left:18px;font-size:13px;color:var(--muted);line-height:1.6;}
+
+  .modal-overlay{position:fixed;inset:0;background:rgba(18,38,34,0.45);display:flex;align-items:center;justify-content:center;padding:20px;z-index:50;}
+  .modal{background:#fff;border-radius:14px;padding:22px;max-width:360px;width:100%;box-shadow:0 20px 50px rgba(0,0,0,0.25);}
+  .modal h3{margin:0 0 4px;font-size:16px;}
+  .modal p{margin:0 0 14px;font-size:13px;color:var(--muted);}
+  .modal .row-actions{margin-top:16px;}
+  footer.foot{text-align:center;color:var(--muted);font-size:11px;padding:20px;}
+</style>
+</head>
+<body>
+<div id="app"></div>
+
+<script>
+(function(){
+  "use strict";
+
+  /* ============================ FORMAT ENGINE ============================ */
+  const FORMATS = {
+    fast4: {
+      key:'fast4', label:'Fast4 · No-Ad', gameNoAd:true,
+      setGamesTarget:4, setWinByTwo:false, tiebreakAtGames:3,
+      tiebreakTarget:5, tiebreakWinByTwo:false,
+      tiebreakName:'5-Point Sudden-Death Tie-Break'
+    },
+    traditional: {
+      key:'traditional', label:'Traditional · Ad-Scoring', gameNoAd:false,
+      setGamesTarget:6, setWinByTwo:true, tiebreakAtGames:6,
+      tiebreakTarget:7, tiebreakWinByTwo:true,
+      tiebreakName:'7-Point Tie-Break'
+    }
+  };
+  const MATCH_TIEBREAK_TARGET = 10;
+
+  function createInitialMatchState(){
+    return {
+      sets:[], currentSetGames:{p1:0,p2:0}, currentGamePoints:{p1:0,p2:0},
+      inSetTiebreak:false, setTiebreakPoints:{p1:0,p2:0},
+      inMatchTiebreak:false, matchTiebreakPoints:{p1:0,p2:0},
+      matchTiebreakFinal:null, matchComplete:false, winner:null
+    };
+  }
+
+  function resetForNextSet(state){
+    state.currentSetGames={p1:0,p2:0};
+    state.currentGamePoints={p1:0,p2:0};
+    state.inSetTiebreak=false;
+    state.setTiebreakPoints={p1:0,p2:0};
+  }
+
+  function checkMatchCompletion(state){
+    if(state.sets.length===2){
+      const p1Sets = state.sets.filter(s=>s.p1>s.p2).length;
+      const p2Sets = state.sets.filter(s=>s.p2>s.p1).length;
+      if(p1Sets===2){state.matchComplete=true; state.winner='p1';}
+      else if(p2Sets===2){state.matchComplete=true; state.winner='p2';}
+      else{ state.inMatchTiebreak=true; state.matchTiebreakPoints={p1:0,p2:0}; }
+    }
+  }
+
+  function awardPoint(state, cfg, winner){
+    if(state.matchComplete) return state;
+    const loser = winner==='p1'?'p2':'p1';
+
+    if(state.inMatchTiebreak){
+      state.matchTiebreakPoints[winner]++;
+      const a=state.matchTiebreakPoints.p1, b=state.matchTiebreakPoints.p2;
+      const w=Math.max(a,b), l=Math.min(a,b);
+      if(w>=MATCH_TIEBREAK_TARGET && (w-l)>=2){
+        state.matchComplete=true;
+        state.winner = a>b? 'p1':'p2';
+        state.matchTiebreakFinal = {p1:a,p2:b};
+      }
+      return state;
+    }
+
+    if(state.inSetTiebreak){
+      state.setTiebreakPoints[winner]++;
+      const a=state.setTiebreakPoints.p1, b=state.setTiebreakPoints.p2;
+      const w=Math.max(a,b), l=Math.min(a,b);
+      const done = cfg.tiebreakWinByTwo ? (w>=cfg.tiebreakTarget && (w-l)>=2) : (w>=cfg.tiebreakTarget);
+      if(done){
+        const tied = cfg.tiebreakAtGames;
+        const setScore = {p1:(a>b? tied+1:tied), p2:(b>a? tied+1:tied), tiebreak:{p1:a,p2:b}};
+        state.sets.push(setScore);
+        resetForNextSet(state);
+        checkMatchCompletion(state);
+      }
+      return state;
+    }
+
+    state.currentGamePoints[winner]++;
+    const gp = state.currentGamePoints;
+    let gameWon=false;
+    if(cfg.gameNoAd){ if(gp[winner]>=4) gameWon=true; }
+    else { if(gp[winner]>=4 && (gp[winner]-gp[loser])>=2) gameWon=true; }
+    if(gameWon){
+      state.currentSetGames[winner]++;
+      state.currentGamePoints={p1:0,p2:0};
+      const sg=state.currentSetGames;
+      const w=Math.max(sg.p1,sg.p2), l=Math.min(sg.p1,sg.p2);
+      let setDone=false;
+      if(cfg.setWinByTwo){ if(w>=cfg.setGamesTarget && (w-l)>=2) setDone=true; }
+      else { if(w>=cfg.setGamesTarget) setDone=true; }
+      if(setDone){
+        state.sets.push({p1:sg.p1,p2:sg.p2});
+        resetForNextSet(state);
+        checkMatchCompletion(state);
+      } else if(sg.p1===cfg.tiebreakAtGames && sg.p2===cfg.tiebreakAtGames){
+        state.inSetTiebreak=true;
+        state.setTiebreakPoints={p1:0,p2:0};
+      }
+    }
+    return state;
+  }
+
+  function replay(log, cfg){
+    let state = createInitialMatchState();
+    for(const winner of log){
+      if(state.matchComplete) break;
+      awardPoint(state, cfg, winner);
+    }
+    return state;
+  }
+
+  function formatGameScore(gp, noAd){
+    const labels=['0','15','30','40'];
+    const a=gp.p1, b=gp.p2;
+    if(!noAd && a>=3 && b>=3){
+      if(a===b) return 'Deuce';
+      if(a-b===1) return 'Advantage — Player 1';
+      if(b-a===1) return 'Advantage — Player 2';
+    }
+    return labels[Math.min(a,3)]+' – '+labels[Math.min(b,3)];
+  }
+
+  /* ============================ BRACKET DEFINITION ============================ */
+  const MATCH_DEFS = [
+    {id:'PI1', round:'Play-In', format:'fast4', p1Seed:15, p2Seed:18},
+    {id:'PI2', round:'Play-In', format:'fast4', p1Seed:16, p2Seed:17},
+    {id:'R16-1', round:'Round of 16', format:'fast4', p1Seed:1, p2Source:'PI2'},
+    {id:'R16-2', round:'Round of 16', format:'fast4', p1Seed:9, p2Seed:8},
+    {id:'R16-3', round:'Round of 16', format:'fast4', p1Seed:5, p2Seed:12},
+    {id:'R16-4', round:'Round of 16', format:'fast4', p1Seed:13, p2Seed:4},
+    {id:'R16-5', round:'Round of 16', format:'fast4', p1Seed:3, p2Seed:14},
+    {id:'R16-6', round:'Round of 16', format:'fast4', p1Seed:11, p2Seed:6},
+    {id:'R16-7', round:'Round of 16', format:'fast4', p1Seed:7, p2Seed:10},
+    {id:'R16-8', round:'Round of 16', format:'fast4', p1Source:'PI1', p2Seed:2},
+    {id:'QF-1', round:'Quarterfinal', format:'fast4', p1Source:'R16-1', p2Source:'R16-2'},
+    {id:'QF-2', round:'Quarterfinal', format:'fast4', p1Source:'R16-3', p2Source:'R16-4'},
+    {id:'QF-3', round:'Quarterfinal', format:'fast4', p1Source:'R16-5', p2Source:'R16-6'},
+    {id:'QF-4', round:'Quarterfinal', format:'fast4', p1Source:'R16-7', p2Source:'R16-8'},
+    {id:'SF-1', round:'Semifinal', format:'traditional', p1Source:'QF-1', p2Source:'QF-2'},
+    {id:'SF-2', round:'Semifinal', format:'traditional', p1Source:'QF-3', p2Source:'QF-4'},
+    {id:'F-1', round:'Final', format:'traditional', p1Source:'SF-1', p2Source:'SF-2'}
+  ];
+  const ROUND_ORDER = ['Play-In','Round of 16','Quarterfinal','Semifinal','Final'];
+
+  function getPlayerBySeed(seed, players){
+    const p = (players||[]).find(x=>x.seed===seed);
+    return p ? {seed:p.seed, name:p.name} : {seed:seed, name:'Seed '+seed};
+  }
+
+  function resolveBracket(config, pointLogs){
+    const players = config && config.players ? config.players : [];
+    const logs = pointLogs || {};
+    const resolved = {};
+    for(const def of MATCH_DEFS){
+      let p1 = def.p1Seed ? getPlayerBySeed(def.p1Seed, players) : null;
+      let p2 = def.p2Seed ? getPlayerBySeed(def.p2Seed, players) : null;
+      if(def.p1Source){ const src=resolved[def.p1Source]; if(src && src.winner) p1=src.winner; }
+      if(def.p2Source){ const src=resolved[def.p2Source]; if(src && src.winner) p2=src.winner; }
+      const cfg = FORMATS[def.format];
+      const log = logs[def.id] || [];
+      const state = replay(log, cfg);
+      let winner=null;
+      if(state.matchComplete){ winner = state.winner==='p1' ? p1 : p2; }
+      resolved[def.id] = Object.assign({}, def, {p1:p1,p2:p2,state:state,winner:winner,log:log,cfg:cfg});
+    }
+    return resolved;
+  }
+
+  /* ============================ STORAGE (local server + real localStorage) ============================ */
+  const UNLOCK_KEY = 'tennis_tournament_organizer_unlock_v1';
+  let local = { config:null, pointLogs:{}, updatedAt:0 };
+  let syncStatus = 'saved'; // saved | saving | error
+  let saveInFlight = false;
+  let saveQueued = false;
+
+  async function loadState(){
+    try{
+      const res = await fetch('/api/state');
+      if(res.ok){
+        local = await res.json();
+      }
+    }catch(e){
+      syncStatus='error';
+    }
+    // organizer unlock is remembered per-device via real localStorage (this is a normal
+    // browser, not a sandboxed artifact, so localStorage works and persists across refresh)
+    try{
+      if(window.localStorage.getItem(UNLOCK_KEY) === 'true'){
+        organizerUnlocked = true;
+      }
+    }catch(e){ /* localStorage unavailable — stay locked */ }
+  }
+
+  async function saveState(){
+    if(saveInFlight){ saveQueued=true; return; }
+    saveInFlight = true;
+    syncStatus='saving'; render();
+    try{
+      const res = await fetch('/api/state', {
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body: JSON.stringify(local)
+      });
+      if(res.ok){
+        local = await res.json();
+        syncStatus='saved';
+      } else {
+        syncStatus='error';
+      }
+    }catch(e){
+      syncStatus='error';
+    }
+    saveInFlight=false;
+    render();
+    if(saveQueued){ saveQueued=false; saveState(); }
+  }
+
+  async function pollRemote(){
+    if(saveInFlight) return;
+    try{
+      const res = await fetch('/api/state');
+      if(res.ok){
+        const remote = await res.json();
+        if((remote.updatedAt||0) > (local.updatedAt||0)){
+          local = remote;
+          render();
+        }
+      }
+    }catch(e){ /* server unreachable — try again next interval */ }
+  }
+  setInterval(pollRemote, 3000);
+
+  /* ============================ APP STATE ============================ */
+  let view = 'loading';
+  let currentMatchId = null;
+  let organizerUnlocked = false;
+  let modal = null;
+  let unlockError = '';
+  let setupError = '';
+
+  function seedName(i){ return 'Player '+i; }
+
+  /* ============================ ACTIONS ============================ */
+  window.__actions = {
+
+    submitSetup(formEl){
+      const names = [];
+      for(let i=1;i<=18;i++){
+        const val = formEl.querySelector('[data-seed-input="'+i+'"]').value.trim();
+        names.push({seed:i, name: val || seedName(i)});
+      }
+      const pass = formEl.querySelector('[name=passcode]').value.trim();
+      if(pass.length < 4){
+        setupError = 'Choose an organizer PIN of at least 4 characters.';
+        render();
+        return;
+      }
+      local.config = { players:names, passcode:pass, setupComplete:true };
+      local.pointLogs = {};
+      setupError='';
+      view='bracket';
+      saveState();
+      render();
+    },
+
+    openMatch(id){ currentMatchId = id; view='match'; render(); },
+    backToBracket(){ view='bracket'; currentMatchId=null; render(); },
+    openUnlock(){ modal='unlock'; unlockError=''; render(); },
+    closeModal(){ modal=null; render(); },
+
+    submitUnlock(formEl){
+      const val = formEl.querySelector('[name=pin]').value.trim();
+      if(local.config && val === local.config.passcode){
+        organizerUnlocked = true;
+        modal = null;
+        unlockError='';
+        try{ window.localStorage.setItem(UNLOCK_KEY, 'true'); }catch(e){}
+      } else {
+        unlockError = 'That PIN doesn\'t match. Try again.';
+      }
+      render();
+    },
+
+    lockOrganizer(){
+      organizerUnlocked=false;
+      try{ window.localStorage.removeItem(UNLOCK_KEY); }catch(e){}
+      render();
+    },
+
+    point(matchId, who){
+      if(!organizerUnlocked) return;
+      const resolved = resolveBracket(local.config, local.pointLogs);
+      const m = resolved[matchId];
+      if(!m || !m.p1 || !m.p2 || m.state.matchComplete) return;
+      if(!local.pointLogs[matchId]) local.pointLogs[matchId]=[];
+      local.pointLogs[matchId].push(who);
+      saveState();
+      render();
+    },
+
+    undo(matchId){
+      if(!organizerUnlocked) return;
+      const log = local.pointLogs[matchId];
+      if(log && log.length){
+        log.pop();
+        saveState();
+        render();
+      }
+    }
+  };
+
+  /* ============================ RENDER HELPERS ============================ */
+  function esc(s){ return String(s).replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+
+  function syncPillHtml(){
+    const map = {saved:['Synced','sync-saved'], saving:['Saving…','sync-saving'], error:['Server unreachable','sync-error']};
+    const [label,cls] = map[syncStatus] || map.saved;
+    return '<span class="sync-pill '+cls+'">'+label+'</span>';
+  }
+
+  function headerHtml(){
+    return ''+
+    '<header class="top">'+
+      '<div class="brand">'+
+        '<span class="dot"></span>'+
+        '<div><h1>18-Draw Scoreboard</h1><div class="sub">Single-elimination · 1 court · 2 days</div></div>'+
+      '</div>'+
+      '<div style="display:flex;align-items:center;gap:10px;">'+
+        syncPillHtml()+
+        (organizerUnlocked
+          ? '<button class="btn btn-ghost" data-action="lockOrganizer">Organizer ✓ · Lock</button>'
+          : '<button class="btn btn-ghost" data-action="openUnlock">Organizer unlock</button>')+
+      '</div>'+
+    '</header>';
+  }
+
+  function setupScreenHtml(){
+    const seedsHtml = [];
+    for(let i=1;i<=18;i++){
+      const cls = i>=15 ? 'seed-badge playin' : 'seed-badge';
+      seedsHtml.push(
+        '<div class="seed-row"><div class="'+cls+'">'+i+'</div>'+
+        '<input type="text" data-seed-input="'+i+'" placeholder="'+seedName(i)+'"></div>'
+      );
+    }
+    return ''+
+    '<div class="wrap">'+
+      '<p class="eyebrow">Tournament setup</p>'+
+      '<h2>Enter the 18-player draw</h2>'+
+      '<p class="lead">Seeds 1–14 receive a bye straight into the Round of 16. Seeds 15–18 play the Play-In round for the two remaining Round-of-16 spots.</p>'+
+      '<div class="card">'+
+        (setupError ? '<div class="error-banner">'+esc(setupError)+'</div>' : '')+
+        '<form id="setupForm">'+
+          '<div class="grid18">'+seedsHtml.join('')+'</div>'+
+          '<div class="field" style="max-width:280px;">'+
+            '<label class="field-label">Organizer PIN</label>'+
+            '<input type="password" name="passcode" placeholder="At least 4 characters" autocomplete="off">'+
+            '<div class="hint">Anyone with this PIN can enter scores. Everyone else can view live, read-only.</div>'+
+          '</div>'+
+          '<button type="submit" class="btn btn-primary">Create bracket</button>'+
+        '</form>'+
+      '</div>'+
+    '</div>';
+  }
+
+  function currentGamesFor(m, who){
+    const s=m.state;
+    let parts = s.sets.map(function(st){ return st[who]; });
+    if(!s.matchComplete){
+      if(s.inMatchTiebreak) parts.push('MTB '+s.matchTiebreakPoints[who]);
+      else parts.push(s.currentSetGames[who]);
+    }
+    return parts.join(' / ');
+  }
+
+  function matchCardHtml(m){
+    const p1name = m.p1 ? esc(m.p1.name) : '<span class="tbd">TBD</span>';
+    const p2name = m.p2 ? esc(m.p2.name) : '<span class="tbd">TBD</span>';
+    const s = m.state;
+    const setSummary = s.sets.map(function(st){ return st.p1+'-'+st.p2; }).join(', ');
+    let liveBit = '';
+    if(!s.matchComplete && (s.sets.length>0 || s.currentSetGames.p1>0 || s.currentSetGames.p2>0 || s.currentGamePoints.p1>0 || s.currentGamePoints.p2>0 || s.inMatchTiebreak)){
+      liveBit = '<span class="live-dot"></span> Live';
+    } else if(!m.p1 || !m.p2){
+      liveBit = 'Awaiting result';
+    } else if(s.matchComplete){
+      liveBit = 'Final';
+    } else {
+      liveBit = 'Not started';
+    }
+    const p1win = s.matchComplete && s.winner==='p1';
+    const p2win = s.matchComplete && s.winner==='p2';
+    return ''+
+    '<div class="match-card" data-action="openMatch" data-id="'+m.id+'">'+
+      '<div class="fmt-tag">'+liveBit+'</div>'+
+      '<div class="p-row '+(p1win?'win':'')+'"><span class="p-name '+(m.p1?'':'tbd')+'">'+p1name+'</span><span class="p-score">'+(m.p1 ? currentGamesFor(m,'p1') : '')+'</span></div>'+
+      '<div class="p-row '+(p2win?'win':'')+'"><span class="p-name '+(m.p2?'':'tbd')+'">'+p2name+'</span><span class="p-score">'+(m.p2 ? currentGamesFor(m,'p2') : '')+'</span></div>'+
+      (setSummary ? '<div class="hint" style="margin-top:6px;">Sets: '+esc(setSummary)+'</div>' : '')+
+    '</div>';
+  }
+
+  function bracketScreenHtml(){
+    const resolved = resolveBracket(local.config, local.pointLogs);
+    const cols = ROUND_ORDER.map(function(roundName){
+      const matches = MATCH_DEFS.filter(d=>d.round===roundName).map(d=>resolved[d.id]);
+      const cards = matches.map(matchCardHtml).join('');
+      return '<div class="round-col"><div class="round-title">'+roundName+'</div>'+cards+'</div>';
+    }).join('');
+    return ''+
+    '<div class="wrap">'+
+      '<p class="eyebrow">Live draw</p>'+
+      '<h2>Bracket</h2>'+
+      '<p class="lead">Tap any match to open the scoreboard. Play-In, Round of 16 and Quarterfinals use Fast4 no-ad rules. Semifinals and the Final use traditional ad-scoring.</p>'+
+      '<div class="rounds-scroll">'+cols+'</div>'+
+    '</div>';
+  }
+
+  function tiebreakRulesHtml(cfg){
+    if(cfg.key==='fast4'){
+      return '<details class="rules-box"><summary>Tie-break &amp; match tie-break rules</summary><ul>'+
+        '<li>At 3–3 in games: play a 5-point sudden-death tie-break — first to 5 wins the set (score recorded as 4–3).</li>'+
+        '<li>Server order: first server serves 1 point from the right, then players alternate serving 2 points at a time, starting from the left.</li>'+
+        '<li>Ends are swapped once, after the 4th point of the tie-break.</li>'+
+        '<li>If sets are split 1–1: no third set — play a 10-point match tie-break (win by 2) instead.</li>'+
+        '</ul></details>';
+    }
+    return '<details class="rules-box"><summary>Tie-break &amp; match tie-break rules</summary><ul>'+
+      '<li>At 6–6 in games: play a standard 7-point tie-break, win by 2 (score recorded as 7–6 or higher).</li>'+
+      '<li>Ends are swapped after the 1st point, then every 6 points.</li>'+
+      '<li>If sets are split 1–1: no third set — play a 10-point match tie-break (win by 2) instead.</li>'+
+      '</ul></details>';
+  }
+
+  function matchScreenHtml(){
+    const resolved = resolveBracket(local.config, local.pointLogs);
+    const m = resolved[currentMatchId];
+    if(!m) return '<div class="wrap"><p>Match not found.</p></div>';
+    const s = m.state;
+    const cfg = m.cfg;
+    const p1 = m.p1, p2 = m.p2;
+
+    const setBoxes = function(who){
+      const boxes = [];
+      s.sets.forEach(function(st){
+        boxes.push('<div class="sb-set-box">'+st[who]+'</div>');
+      });
+      if(!s.matchComplete){
+        if(s.inMatchTiebreak){ boxes.push('<div class="sb-set-box current">'+s.matchTiebreakPoints[who]+'</div>'); }
+        else { boxes.push('<div class="sb-set-box current">'+s.currentSetGames[who]+'</div>'); }
+      }
+      return boxes.join('');
+    };
+
+    let liveLabel, liveScore, liveSub;
+    if(s.matchComplete){
+      liveLabel = 'Match complete'; liveScore = ''; liveSub = '';
+    } else if(s.inMatchTiebreak){
+      liveLabel = '10-Point Match Tie-Break (win by 2)';
+      liveScore = s.matchTiebreakPoints.p1+' – '+s.matchTiebreakPoints.p2;
+      liveSub = 'Sets tied 1–1 · deciding tie-break in progress';
+    } else if(s.inSetTiebreak){
+      liveLabel = cfg.tiebreakName;
+      liveScore = s.setTiebreakPoints.p1+' – '+s.setTiebreakPoints.p2;
+      liveSub = 'Set tied at '+cfg.tiebreakAtGames+'–'+cfg.tiebreakAtGames;
+    } else {
+      liveLabel = 'Current game';
+      liveScore = formatGameScore(s.currentGamePoints, cfg.gameNoAd);
+      liveSub = 'Set score '+s.currentSetGames.p1+'–'+s.currentSetGames.p2;
+    }
+
+    let winnerBanner = '';
+    if(s.matchComplete){
+      const winnerObj = s.winner==='p1'?p1:p2;
+      const setLine = s.sets.map(st=>st.p1+'-'+st.p2).join(', ');
+      const mtb = s.matchTiebreakFinal ? ' (Match TB '+s.matchTiebreakFinal.p1+'-'+s.matchTiebreakFinal.p2+')' : '';
+      winnerBanner = '<div class="winner-banner">🏆 '+esc(winnerObj.name)+' wins — '+esc(setLine)+esc(mtb)+'</div>';
+    }
+
+    let controlsHtml = '';
+    if(!p1 || !p2){
+      controlsHtml = '<div class="lock-msg">Waiting for both players in this match to be decided by earlier results.</div>';
+    } else if(s.matchComplete){
+      controlsHtml = '';
+    } else if(!organizerUnlocked){
+      controlsHtml = '<div class="lock-msg">Unlock organizer mode to enter points for this match.</div>';
+    } else {
+      controlsHtml = ''+
+      '<div class="point-controls">'+
+        '<button class="point-btn" data-action="point" data-id="'+m.id+'" data-who="p1">Point<br>'+esc(p1.name)+'<small>tap to award</small></button>'+
+        '<button class="point-btn" data-action="point" data-id="'+m.id+'" data-who="p2">Point<br>'+esc(p2.name)+'<small>tap to award</small></button>'+
+      '</div>'+
+      '<div class="row-actions">'+
+        '<button class="btn btn-outline" data-action="undo" data-id="'+m.id+'" '+((m.log.length===0)?'disabled':'')+'>Undo last point</button>'+
+      '</div>';
+    }
+
+    return ''+
+    '<div class="wrap">'+
+      '<button class="back-link" data-action="backToBracket">‹ Back to bracket</button>'+
+      '<div class="match-head">'+
+        '<div>'+
+          '<p class="eyebrow">'+esc(m.round)+'</p>'+
+          '<h2 style="margin-bottom:4px;">'+ (p1?esc(p1.name):'TBD') +' vs '+ (p2?esc(p2.name):'TBD') +'</h2>'+
+        '</div>'+
+        '<span class="fmt-pill '+(cfg.key==='fast4'?'fast4':'trad')+'">'+cfg.label+' · Best of 2 sets</span>'+
+      '</div>'+
+      winnerBanner+
+      '<div class="scoreboard">'+
+        '<div class="sb-players">'+
+          '<div class="sb-name">'+(p1? '<span class="seed">#'+p1.seed+'</span>'+esc(p1.name) : 'TBD')+'</div>'+
+          '<div class="sb-sets">'+setBoxes('p1')+'</div>'+
+          '<div class="sb-name">'+(p2? '<span class="seed">#'+p2.seed+'</span>'+esc(p2.name) : 'TBD')+'</div>'+
+          '<div class="sb-sets">'+setBoxes('p2')+'</div>'+
+        '</div>'+
+        '<div class="sb-divider"></div>'+
+        '<div class="sb-live-label">'+liveLabel+'</div>'+
+        (liveScore ? '<div class="sb-live-score num">'+liveScore+'</div>' : '')+
+        (liveSub ? '<div class="sb-live-sub">'+liveSub+'</div>' : '')+
+        (!s.matchComplete ? '<div class="sb-note">'+ (cfg.gameNoAd
+            ? 'No-Ad scoring: at 40–40 the next point wins the game outright. Receiver picks return side.'
+            : 'Traditional scoring: at 40–40 (Deuce) players must win by two consecutive points.') +'</div>' : '')+
+      '</div>'+
+      controlsHtml+
+      tiebreakRulesHtml(cfg)+
+    '</div>';
+  }
+
+  function unlockModalHtml(){
+    return ''+
+    '<div class="modal-overlay" data-action="modalOverlay">'+
+      '<div class="modal" onclick="event.stopPropagation()">'+
+        '<h3>Organizer unlock</h3>'+
+        '<p>Enter the organizer PIN to record points and manage matches.</p>'+
+        (unlockError ? '<div class="error-banner">'+esc(unlockError)+'</div>' : '')+
+        '<form id="unlockForm">'+
+          '<input type="password" name="pin" placeholder="PIN" autocomplete="off">'+
+          '<div class="row-actions">'+
+            '<button type="button" class="btn btn-outline" data-action="closeModal">Cancel</button>'+
+            '<button type="submit" class="btn btn-primary">Unlock</button>'+
+          '</div>'+
+        '</form>'+
+      '</div>'+
+    '</div>';
+  }
+
+  /* ============================ MAIN RENDER ============================ */
+  function render(){
+    const app = document.getElementById('app');
+    let body = '';
+    if(view==='loading'){ body = '<div class="wrap"><p class="lead">Loading tournament…</p></div>'; }
+    else if(view==='setup'){ body = setupScreenHtml(); }
+    else if(view==='bracket'){ body = bracketScreenHtml(); }
+    else if(view==='match'){ body = matchScreenHtml(); }
+    app.innerHTML = headerHtml() + body +
+      '<footer class="foot">Data is saved on this computer in data.json — everyone on the same network sees live updates.</footer>' +
+      (modal==='unlock' ? unlockModalHtml() : '');
+    attachHandlers();
+  }
+
+  function attachHandlers(){
+    const app = document.getElementById('app');
+    app.onclick = function(e){
+      const el = e.target.closest('[data-action]');
+      if(!el) return;
+      const action = el.getAttribute('data-action');
+      if(action==='modalOverlay'){ window.__actions.closeModal(); return; }
+      if(action==='openMatch'){ window.__actions.openMatch(el.getAttribute('data-id')); return; }
+      if(action==='backToBracket'){ window.__actions.backToBracket(); return; }
+      if(action==='openUnlock'){ window.__actions.openUnlock(); return; }
+      if(action==='closeModal'){ window.__actions.closeModal(); return; }
+      if(action==='lockOrganizer'){ window.__actions.lockOrganizer(); return; }
+      if(action==='point'){ window.__actions.point(el.getAttribute('data-id'), el.getAttribute('data-who')); return; }
+      if(action==='undo'){ window.__actions.undo(el.getAttribute('data-id')); return; }
+    };
+    const setupForm = document.getElementById('setupForm');
+    if(setupForm){ setupForm.onsubmit = function(e){ e.preventDefault(); window.__actions.submitSetup(setupForm); }; }
+    const unlockForm = document.getElementById('unlockForm');
+    if(unlockForm){ unlockForm.onsubmit = function(e){ e.preventDefault(); window.__actions.submitUnlock(unlockForm); }; }
+  }
+
+  /* ============================ INIT ============================ */
+  (async function init(){
+    await loadState();
+    view = (local.config && local.config.setupComplete) ? 'bracket' : 'setup';
+    render();
+  })();
+
+})();
+</script>
+</body>
+</html>

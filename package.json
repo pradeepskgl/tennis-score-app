@@ -1,0 +1,19 @@
+{
+  "name": "tennis-tournament-scoreboard",
+  "version": "1.0.0",
+  "private": true,
+  "description": "18-draw single-elimination tennis tournament live scoreboard",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "engines": {
+    "node": ">=14"
+  },
+  "dependencies": {
+    "mongodb": "^6.0.0"
+  },
+  "dependencies": {
+    "mongodb": "^7.5.0"
+  }
+}
