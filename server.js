@@ -1,4 +1,4 @@
-// 18-Draw Scoreboard — local server
+// AO Tennis Tournament: Score Board — local server
 // Zero dependencies: uses only Node's built-in http/fs modules.
 // Run with:  node server.js
 // Then open: http://localhost:3000
@@ -22,7 +22,7 @@ const MIME = {
 };
 
 function defaultState() {
-  return { config: null, pointLogs: {}, updatedAt: 0 };
+  return { config: null, pointLogs: {}, tossInfo: {}, updatedAt: 0 };
 }
 
 /* ---------- Storage backend A: local file (used when running on your own computer) ---------- */
@@ -154,7 +154,7 @@ const server = http.createServer((req, res) => {
 
 server.listen(PORT, () => {
   console.log('');
-  console.log('  18-Draw Scoreboard is running.');
+  console.log('  AO Tennis Tournament: Score Board is running.');
   console.log('  On this computer:   http://localhost:' + PORT);
   console.log('  On your network:    http://<this-computer-ip>:' + PORT);
   console.log('  (Find your IP with `ipconfig` on Windows or `ifconfig`/`ip a` on Mac/Linux)');

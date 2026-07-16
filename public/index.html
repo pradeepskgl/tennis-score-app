@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>18-Draw Scoreboard</title>
+<title>AO Tennis Tournament: Score Board</title>
 <style>
   :root{
     --paper:#F1F4EF;
@@ -63,7 +63,15 @@
   .seed-badge.playin{background:rgba(181,80,47,0.12);color:var(--clay);border-color:transparent;}
   input[type=text],input[type=password]{width:100%;padding:10px 12px;border:1px solid var(--border);border-radius:8px;
     font-size:14px;font-family:inherit;background:#fff;color:var(--ink);}
-  input:focus{outline:2px solid var(--court-blue);outline-offset:1px;}
+  select{width:100%;padding:10px 12px;border:1px solid var(--border);border-radius:8px;
+    font-size:14px;font-family:inherit;background:#fff;color:var(--ink);}
+  input:focus,select:focus{outline:2px solid var(--court-blue);outline-offset:1px;}
+  .radio-group{display:flex;flex-direction:column;gap:8px;}
+  .radio-option{display:flex;align-items:flex-start;gap:8px;font-size:13px;color:var(--ink);cursor:pointer;
+    border:1px solid var(--border);border-radius:8px;padding:10px 12px;}
+  .radio-option input{margin-top:3px;flex:none;}
+  .radio-option span{line-height:1.4;}
+  .radio-option strong{font-weight:800;}
   label.field-label{font-size:12px;font-weight:700;color:var(--muted);display:block;margin:0 0 6px;}
   .field{margin-bottom:16px;}
   .hint{font-size:12px;color:var(--muted);margin-top:6px;}
@@ -111,6 +119,12 @@
 
   .winner-banner{background:rgba(31,92,77,0.1);border:1px solid rgba(31,92,77,0.35);color:var(--court-green);
     padding:12px 14px;border-radius:10px;font-weight:800;font-size:14px;margin-bottom:16px;display:flex;align-items:center;gap:8px;}
+
+  .changeover-box{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:12px 14px;margin-bottom:12px;}
+  .changeover-box.due{background:rgba(207,232,76,0.18);border-color:rgba(141,160,40,0.4);}
+  .changeover-box .co-label{font-size:10px;text-transform:uppercase;letter-spacing:0.08em;font-weight:800;color:var(--muted);margin-bottom:4px;}
+  .changeover-box .co-msg{font-size:14px;font-weight:700;color:var(--ink);}
+  .changeover-box .co-sides{font-size:12px;color:var(--muted);margin-top:4px;}
 
   .point-controls{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px;}
   .point-btn{padding:16px 10px;border-radius:12px;border:1px solid var(--border);background:#fff;
@@ -258,7 +272,118 @@
     return labels[Math.min(a,3)]+' – '+labels[Math.min(b,3)];
   }
 
-  /* ============================ BRACKET DEFINITION ============================ */
+  /* ============================ COIN TOSS + CHANGEOVER HELPERS ============================ */
+  const SIDE_LABELS = { pool:'Pool End', entrance:'Entrance End' };
+  const CATEGORY_LABELS = { serve:'Serve or Receive', side:'Starting Side' };
+
+  function oppositeSide(sd){ return sd==='pool' ? 'entrance' : 'pool'; }
+  function oppositePlayer(p){ return p==='p1' ? 'p2' : 'p1'; }
+  function pName(m, key){
+    const p = key==='p1' ? m.p1 : m.p2;
+    return p ? p.name : (key==='p1'?'Player 1':'Player 2');
+  }
+
+  // Given the in-progress toss wizard answers, works out who decides which category
+  // (serve/receive vs starting side) — returns null if not enough has been answered yet.
+  function tossPlanFromDraft(draft){
+    if(!draft || !draft.tossWinner || !draft.winnerChoice) return null;
+    if(draft.winnerChoice==='defer'){
+      if(!draft.deferCategory) return null;
+      const decider1 = oppositePlayer(draft.tossWinner);
+      const category1 = draft.deferCategory;
+      const decider2 = draft.tossWinner;
+      const category2 = category1==='serve' ? 'side' : 'serve';
+      return { category1:category1, decider1:decider1, category2:category2, decider2:decider2 };
+    }
+    const decider1 = draft.tossWinner;
+    const category1 = draft.winnerChoice; // 'serve' or 'side'
+    const decider2 = oppositePlayer(draft.tossWinner);
+    const category2 = category1==='serve' ? 'side' : 'serve';
+    return { category1:category1, decider1:decider1, category2:category2, decider2:decider2 };
+  }
+
+  function sidesFromSwap(tossInfo, swapped){
+    return {
+      p1: swapped ? oppositeSide(tossInfo.startSide.p1) : tossInfo.startSide.p1,
+      p2: swapped ? oppositeSide(tossInfo.startSide.p2) : tossInfo.startSide.p2
+    };
+  }
+
+  // Suggests when the scorer should call a change of ends, and (if the coin toss was
+  // recorded) which side each player should currently be on. This is an aid for the
+  // scorer, not a strict umpiring system — it doesn't track serve rotation.
+  function computeChangeover(m, tossInfo, config){
+    const s = m.state, cfg = m.cfg;
+    const style = (config && config.fast4ChangeoverStyle) || 'official';
+    let gamesCompleted = 0;
+    s.sets.forEach(function(st){ gamesCompleted += st.p1 + st.p2; });
+    if(!s.matchComplete){ gamesCompleted += s.currentSetGames.p1 + s.currentSetGames.p2; }
+
+    function baseSwapped(n){
+      if(cfg.key==='fast4'){
+        if(style==='timesaver') return Math.floor(n/2) % 2 === 1;
+        return n % 2 === 1;
+      }
+      return n % 2 === 1;
+    }
+
+    const result = { message:'', switchNow:false, sides:null };
+    if(s.matchComplete){ result.message = 'Match complete.'; return result; }
+
+    if(s.inMatchTiebreak || (s.inSetTiebreak && cfg.key!=='fast4')){
+      const pts = s.inMatchTiebreak ? (s.matchTiebreakPoints.p1+s.matchTiebreakPoints.p2) : (s.setTiebreakPoints.p1+s.setTiebreakPoints.p2);
+      const switchesSoFar = pts===0 ? 0 : (1 + Math.floor((pts-1)/6));
+      const justNow = pts>=1 && (pts===1 || (pts-1)%6===0);
+      const swapped = baseSwapped(gamesCompleted) !== (switchesSoFar % 2 === 1);
+      result.switchNow = justNow;
+      const tbLabel = s.inMatchTiebreak ? 'match tie-break' : 'tie-break';
+      result.message = justNow ? 'Switch ends now.' : (pts===0 ? 'Ends switch after the 1st point of this '+tbLabel+'.' : 'Next end switch at point '+(1+6*switchesSoFar)+' of this '+tbLabel+'.');
+      result.sides = tossInfo ? sidesFromSwap(tossInfo, swapped) : null;
+      return result;
+    }
+
+    if(s.inSetTiebreak){ // fast4 5-point sudden-death breaker: single switch after point 4
+      const pts = s.setTiebreakPoints.p1 + s.setTiebreakPoints.p2;
+      const justNow = pts===4;
+      const swapped = baseSwapped(gamesCompleted) !== (pts>=4);
+      result.switchNow = justNow;
+      result.message = justNow ? 'Switch ends now — one-time mid-breaker switch.' : (pts<4 ? 'Ends switch once, after the 4th point of this tie-break.' : 'No further end switches in this tie-break.');
+      result.sides = tossInfo ? sidesFromSwap(tossInfo, swapped) : null;
+      return result;
+    }
+
+    // normal game-based phase (not in any tie-break)
+    const atGameBoundary = s.currentGamePoints.p1===0 && s.currentGamePoints.p2===0 && gamesCompleted>0;
+    let dueNow=false, breakType='';
+    if(cfg.key==='fast4'){
+      if(style==='timesaver'){
+        dueNow = atGameBoundary && gamesCompleted % 2 === 0;
+        breakType = '60-second seated break allowed';
+      } else {
+        dueNow = atGameBoundary && gamesCompleted % 2 === 1;
+        breakType = 'no sitting — quick sip of water and switch';
+      }
+    } else {
+      dueNow = atGameBoundary && gamesCompleted % 2 === 1;
+      breakType = gamesCompleted===1 ? 'just switch, no seated break (end of Game 1)' : '90-second seated changeover';
+    }
+    result.switchNow = dueNow;
+    if(dueNow){
+      result.message = 'Switch ends now — '+breakType+'.';
+    } else {
+      let nextGame;
+      if(cfg.key==='fast4' && style==='timesaver'){
+        nextGame = gamesCompleted % 2 === 0 ? gamesCompleted+2 : gamesCompleted+1;
+      } else {
+        nextGame = gamesCompleted % 2 === 0 ? gamesCompleted+1 : gamesCompleted+2;
+      }
+      result.message = 'Next end switch after Game '+nextGame+'.';
+    }
+    result.sides = tossInfo ? sidesFromSwap(tossInfo, baseSwapped(gamesCompleted)) : null;
+    return result;
+  }
+
+
   const MATCH_DEFS = [
     {id:'PI1', round:'Play-In', format:'fast4', p1Seed:15, p2Seed:18},
     {id:'PI2', round:'Play-In', format:'fast4', p1Seed:16, p2Seed:17},
@@ -306,16 +431,25 @@
 
   /* ============================ STORAGE (local server + real localStorage) ============================ */
   const UNLOCK_KEY = 'tennis_tournament_organizer_unlock_v1';
-  let local = { config:null, pointLogs:{}, updatedAt:0 };
+  let local = { config:null, pointLogs:{}, tossInfo:{}, updatedAt:0 };
   let syncStatus = 'saved'; // saved | saving | error
   let saveInFlight = false;
   let saveQueued = false;
+
+  function normalizeState(obj){
+    obj = obj || {};
+    if(!obj.config) obj.config = null;
+    if(!obj.pointLogs) obj.pointLogs = {};
+    if(!obj.tossInfo) obj.tossInfo = {};
+    if(typeof obj.updatedAt !== 'number') obj.updatedAt = 0;
+    return obj;
+  }
 
   async function loadState(){
     try{
       const res = await fetch('/api/state');
       if(res.ok){
-        local = await res.json();
+        local = normalizeState(await res.json());
       }
     }catch(e){
       syncStatus='error';
@@ -340,7 +474,7 @@
         body: JSON.stringify(local)
       });
       if(res.ok){
-        local = await res.json();
+        local = normalizeState(await res.json());
         syncStatus='saved';
       } else {
         syncStatus='error';
@@ -358,7 +492,7 @@
     try{
       const res = await fetch('/api/state');
       if(res.ok){
-        const remote = await res.json();
+        const remote = normalizeState(await res.json());
         if((remote.updatedAt||0) > (local.updatedAt||0)){
           local = remote;
           render();
@@ -375,6 +509,8 @@
   let modal = null;
   let unlockError = '';
   let setupError = '';
+  let tossDraft = null;      // wizard state while the coin-toss modal is open
+  let settingsDraft = null;  // wizard state while the settings modal is open
 
   function seedName(i){ return 'Player '+i; }
 
@@ -393,8 +529,11 @@
         render();
         return;
       }
-      local.config = { players:names, passcode:pass, setupComplete:true };
+      const changeoverEl = formEl.querySelector('[name=fast4Changeover]:checked');
+      const fast4ChangeoverStyle = changeoverEl ? changeoverEl.value : 'official';
+      local.config = { players:names, passcode:pass, setupComplete:true, fast4ChangeoverStyle:fast4ChangeoverStyle };
       local.pointLogs = {};
+      local.tossInfo = {};
       setupError='';
       view='bracket';
       saveState();
@@ -444,6 +583,80 @@
         saveState();
         render();
       }
+    },
+
+    /* ---------- Coin toss wizard ---------- */
+
+    openToss(matchId){
+      if(!organizerUnlocked) return;
+      tossDraft = { matchId:matchId, tossWinner:null, winnerChoice:null, deferCategory:null, val1:null, val2:null };
+      modal = 'toss';
+      render();
+    },
+
+    setTossField(field, value){
+      if(!tossDraft) return;
+      tossDraft[field] = value;
+      // changing an earlier answer invalidates everything decided after it
+      if(field==='tossWinner'){ tossDraft.winnerChoice=null; tossDraft.deferCategory=null; tossDraft.val1=null; tossDraft.val2=null; }
+      if(field==='winnerChoice'){ tossDraft.deferCategory=null; tossDraft.val1=null; tossDraft.val2=null; }
+      if(field==='deferCategory'){ tossDraft.val1=null; tossDraft.val2=null; }
+      if(field==='val1'){ tossDraft.val2=null; }
+      render();
+    },
+
+    saveToss(){
+      if(!tossDraft || !organizerUnlocked) return;
+      const plan = tossPlanFromDraft(tossDraft);
+      if(!plan || tossDraft.val1===null || tossDraft.val2===null) return; // not complete yet
+      const decisions = {};
+      decisions[plan.category1] = { decider:plan.decider1, value:tossDraft.val1 };
+      decisions[plan.category2] = { decider:plan.decider2, value:tossDraft.val2 };
+      const serveInfo = decisions.serve;
+      const servingFirst = serveInfo.value==='serve' ? serveInfo.decider : oppositePlayer(serveInfo.decider);
+      const sideInfo = decisions.side;
+      const startSide = {};
+      startSide[sideInfo.decider] = sideInfo.value;
+      startSide[oppositePlayer(sideInfo.decider)] = oppositeSide(sideInfo.value);
+      if(!local.tossInfo) local.tossInfo = {};
+      local.tossInfo[tossDraft.matchId] = {
+        tossWinner: tossDraft.tossWinner,
+        winnerChoice: tossDraft.winnerChoice,
+        deferCategory: tossDraft.deferCategory,
+        decisions: decisions,
+        servingFirst: servingFirst,
+        startSide: startSide
+      };
+      modal = null;
+      tossDraft = null;
+      saveState();
+      render();
+    },
+
+    clearToss(matchId){
+      if(!organizerUnlocked) return;
+      if(local.tossInfo){ delete local.tossInfo[matchId]; }
+      saveState();
+      render();
+    },
+
+    /* ---------- Settings ---------- */
+
+    openSettings(){
+      if(!organizerUnlocked || !local.config) return;
+      settingsDraft = { fast4ChangeoverStyle: local.config.fast4ChangeoverStyle || 'official' };
+      modal = 'settings';
+      render();
+    },
+
+    saveSettings(formEl){
+      if(!organizerUnlocked || !local.config) return;
+      const val = formEl.querySelector('[name=fast4Changeover]:checked');
+      local.config.fast4ChangeoverStyle = val ? val.value : 'official';
+      modal = null;
+      settingsDraft = null;
+      saveState();
+      render();
     }
   };
 
@@ -461,10 +674,11 @@
     '<header class="top">'+
       '<div class="brand">'+
         '<span class="dot"></span>'+
-        '<div><h1>18-Draw Scoreboard</h1><div class="sub">Single-elimination · 1 court · 2 days</div></div>'+
+        '<div><h1>AO Tennis Tournament: Score Board</h1><div class="sub">Single-elimination · 1 court · 2 days</div></div>'+
       '</div>'+
       '<div style="display:flex;align-items:center;gap:10px;">'+
         syncPillHtml()+
+        (organizerUnlocked ? '<button class="btn btn-ghost" data-action="openSettings">Settings</button>' : '')+
         (organizerUnlocked
           ? '<button class="btn btn-ghost" data-action="lockOrganizer">Organizer ✓ · Lock</button>'
           : '<button class="btn btn-ghost" data-action="openUnlock">Organizer unlock</button>')+
@@ -490,6 +704,16 @@
         (setupError ? '<div class="error-banner">'+esc(setupError)+'</div>' : '')+
         '<form id="setupForm">'+
           '<div class="grid18">'+seedsHtml.join('')+'</div>'+
+          '<div class="field" style="max-width:420px;">'+
+            '<label class="field-label">Fast4 changeover pacing (Play-In, Round of 16, Quarterfinals)</label>'+
+            '<div class="radio-group">'+
+              '<label class="radio-option"><input type="radio" name="fast4Changeover" value="official" checked> '+
+                '<span><strong>Official Fast4 Pacing</strong> — switch ends after every odd game, no sitting down, just a quick sip of water.</span></label>'+
+              '<label class="radio-option"><input type="radio" name="fast4Changeover" value="timesaver"> '+
+                '<span><strong>Time-Saver</strong> — switch ends after every two games, with a 60-second seated break.</span></label>'+
+            '</div>'+
+            '<div class="hint">Semifinals and the Final always use traditional switching (after odd games, 90-second breaks) — no choice needed there.</div>'+
+          '</div>'+
           '<div class="field" style="max-width:280px;">'+
             '<label class="field-label">Organizer PIN</label>'+
             '<input type="password" name="passcode" placeholder="At least 4 characters" autocomplete="off">'+
@@ -544,11 +768,12 @@
       const cards = matches.map(matchCardHtml).join('');
       return '<div class="round-col"><div class="round-title">'+roundName+'</div>'+cards+'</div>';
     }).join('');
+    const styleLabel = (local.config && local.config.fast4ChangeoverStyle==='timesaver') ? 'Time-Saver (switch every 2 games, 60s break)' : 'Official Fast4 Pacing (switch every odd game, no sit-down)';
     return ''+
     '<div class="wrap">'+
       '<p class="eyebrow">Live draw</p>'+
       '<h2>Bracket</h2>'+
-      '<p class="lead">Tap any match to open the scoreboard. Play-In, Round of 16 and Quarterfinals use Fast4 no-ad rules. Semifinals and the Final use traditional ad-scoring.</p>'+
+      '<p class="lead">Tap any match to open the scoreboard. Play-In, Round of 16 and Quarterfinals use Fast4 no-ad rules ('+esc(styleLabel)+'). Semifinals and the Final use traditional ad-scoring.</p>'+
       '<div class="rounds-scroll">'+cols+'</div>'+
     '</div>';
   }
@@ -576,6 +801,8 @@
     const s = m.state;
     const cfg = m.cfg;
     const p1 = m.p1, p2 = m.p2;
+    const tossInfo = (local.tossInfo && local.tossInfo[currentMatchId]) || null;
+    const changeover = (p1 && p2) ? computeChangeover(m, tossInfo, local.config) : null;
 
     const setBoxes = function(who){
       const boxes = [];
@@ -632,6 +859,21 @@
       '</div>';
     }
 
+    let tossCardHtml = '';
+    if(p1 && p2){
+      tossCardHtml = ''+
+      '<div class="card" style="margin-bottom:16px;">'+
+        '<p class="eyebrow" style="margin-bottom:10px;">Pre-match coin toss</p>'+
+        (tossInfo ? tossSummaryHtml(m, tossInfo) : '<p class="hint" style="margin-top:0;">Not recorded yet.</p>')+
+        (organizerUnlocked ? (
+          '<div class="row-actions" style="justify-content:flex-start;margin-top:8px;">'+
+            '<button class="btn btn-outline" data-action="openToss" data-id="'+m.id+'">'+(tossInfo?'Edit toss':'Record coin toss')+'</button>'+
+            (tossInfo ? '<button class="btn btn-outline" data-action="clearToss" data-id="'+m.id+'">Clear</button>' : '')+
+          '</div>'
+        ) : '')+
+      '</div>';
+    }
+
     return ''+
     '<div class="wrap">'+
       '<button class="back-link" data-action="backToBracket">‹ Back to bracket</button>'+
@@ -643,6 +885,7 @@
         '<span class="fmt-pill '+(cfg.key==='fast4'?'fast4':'trad')+'">'+cfg.label+' · Best of 2 sets</span>'+
       '</div>'+
       winnerBanner+
+      tossCardHtml+
       '<div class="scoreboard">'+
         '<div class="sb-players">'+
           '<div class="sb-name">'+(p1? '<span class="seed">#'+p1.seed+'</span>'+esc(p1.name) : 'TBD')+'</div>'+
@@ -658,15 +901,44 @@
             ? 'No-Ad scoring: at 40–40 the next point wins the game outright. Receiver picks return side.'
             : 'Traditional scoring: at 40–40 (Deuce) players must win by two consecutive points.') +'</div>' : '')+
       '</div>'+
+      (changeover && !s.matchComplete ? changeoverBoxHtml(m, changeover) : '')+
       controlsHtml+
       tiebreakRulesHtml(cfg)+
     '</div>';
   }
 
+  function changeoverBoxHtml(m, chg){
+    return ''+
+    '<div class="changeover-box'+(chg.switchNow?' due':'')+'">'+
+      '<div class="co-label">Switching ends</div>'+
+      '<div class="co-msg">'+(chg.switchNow?'🔁 ':'')+esc(chg.message)+'</div>'+
+      (chg.sides ? '<div class="co-sides">'+esc(pName(m,'p1'))+': '+SIDE_LABELS[chg.sides.p1]+' &nbsp;·&nbsp; '+esc(pName(m,'p2'))+': '+SIDE_LABELS[chg.sides.p2]+'</div>' : '')+
+    '</div>';
+  }
+
+  function tossSummaryHtml(m, info){
+    const serveInfo = info.decisions.serve;
+    const sideInfo = info.decisions.side;
+    const winnerName = esc(pName(m, info.tossWinner));
+    const serveDeciderName = esc(pName(m, serveInfo.decider));
+    const sideDeciderName = esc(pName(m, sideInfo.decider));
+    const servePickLabel = serveInfo.value==='serve' ? 'serve first' : 'receive first';
+    const sidePickLabel = SIDE_LABELS[sideInfo.value];
+    let choiceLine;
+    if(info.winnerChoice==='defer'){
+      choiceLine = winnerName+' won the toss and deferred the choice.';
+    } else {
+      choiceLine = winnerName+' won the toss and chose '+(info.winnerChoice==='serve' ? 'serve/receive' : 'starting side')+'.';
+    }
+    return ''+
+      '<p class="hint" style="margin-top:0;">'+choiceLine+'</p>'+
+      '<p class="hint">'+serveDeciderName+' will '+servePickLabel+'. '+sideDeciderName+' starts on the '+esc(sidePickLabel)+'.</p>';
+  }
+
   function unlockModalHtml(){
     return ''+
-    '<div class="modal-overlay" data-action="modalOverlay">'+
-      '<div class="modal" onclick="event.stopPropagation()">'+
+    '<div class="modal-overlay">'+
+      '<div class="modal">'+
         '<h3>Organizer unlock</h3>'+
         '<p>Enter the organizer PIN to record points and manage matches.</p>'+
         (unlockError ? '<div class="error-banner">'+esc(unlockError)+'</div>' : '')+
@@ -681,6 +953,107 @@
     '</div>';
   }
 
+  function selectHtml(fieldName, options, current, actionFn){
+    let html = '<select onchange="window.__actions.'+actionFn+'(\''+fieldName+'\', this.value)">';
+    html += '<option value="" '+(current?'':'selected')+' disabled>— Select —</option>';
+    options.forEach(function(opt){
+      html += '<option value="'+opt.value+'" '+(current===opt.value?'selected':'')+'>'+esc(opt.label)+'</option>';
+    });
+    html += '</select>';
+    return html;
+  }
+
+  function tossModalHtml(){
+    const resolved = resolveBracket(local.config, local.pointLogs);
+    const m = resolved[tossDraft.matchId];
+    if(!m) return '';
+    const p1Name = esc(pName(m,'p1')), p2Name = esc(pName(m,'p2'));
+    let stepsHtml = '';
+
+    stepsHtml += '<div class="field"><label class="field-label">Who won the toss?</label>'+
+      selectHtml('tossWinner', [{value:'p1',label:pName(m,'p1')},{value:'p2',label:pName(m,'p2')}], tossDraft.tossWinner, 'setTossField') +
+    '</div>';
+
+    if(tossDraft.tossWinner){
+      const winnerName = esc(pName(m, tossDraft.tossWinner));
+      stepsHtml += '<div class="field"><label class="field-label">What did '+winnerName+' choose?</label>'+
+        selectHtml('winnerChoice', [
+          {value:'serve', label:'Serve or Receive'},
+          {value:'side', label:'Choose Starting Side'},
+          {value:'defer', label:'Defer to opponent'}
+        ], tossDraft.winnerChoice, 'setTossField') +
+      '</div>';
+    }
+
+    if(tossDraft.winnerChoice==='defer'){
+      const opponentName = esc(pName(m, oppositePlayer(tossDraft.tossWinner)));
+      stepsHtml += '<div class="field"><label class="field-label">What does '+opponentName+' want to choose instead?</label>'+
+        selectHtml('deferCategory', [
+          {value:'serve', label:'Serve or Receive'},
+          {value:'side', label:'Choose Starting Side'}
+        ], tossDraft.deferCategory, 'setTossField') +
+      '</div>';
+    }
+
+    const plan = tossPlanFromDraft(tossDraft);
+    let canSave = false;
+    if(plan){
+      const decider1Name = esc(pName(m, plan.decider1));
+      const decider2Name = esc(pName(m, plan.decider2));
+      const optionsFor = function(category){
+        return category==='serve'
+          ? [{value:'serve',label:'Serve first'},{value:'receive',label:'Receive first'}]
+          : [{value:'pool',label:'Pool End'},{value:'entrance',label:'Entrance End'}];
+      };
+      stepsHtml += '<div class="field"><label class="field-label">'+decider1Name+' — '+CATEGORY_LABELS[plan.category1]+'</label>'+
+        selectHtml('val1', optionsFor(plan.category1), tossDraft.val1, 'setTossField') +
+      '</div>';
+
+      if(tossDraft.val1){
+        stepsHtml += '<div class="field"><label class="field-label">'+decider2Name+' — '+CATEGORY_LABELS[plan.category2]+'</label>'+
+          selectHtml('val2', optionsFor(plan.category2), tossDraft.val2, 'setTossField') +
+        '</div>';
+      }
+      canSave = !!(tossDraft.val1 && tossDraft.val2);
+    }
+
+    return ''+
+    '<div class="modal-overlay">'+
+      '<div class="modal" style="max-width:440px;">'+
+        '<h3>Record coin toss</h3>'+
+        '<p>'+p1Name+' vs '+p2Name+'</p>'+
+        stepsHtml+
+        '<div class="row-actions">'+
+          '<button type="button" class="btn btn-outline" data-action="closeModal">Cancel</button>'+
+          '<button type="button" class="btn btn-primary" data-action="saveToss" '+(canSave?'':'disabled')+'>Save</button>'+
+        '</div>'+
+      '</div>'+
+    '</div>';
+  }
+
+  function settingsModalHtml(){
+    const current = settingsDraft ? settingsDraft.fast4ChangeoverStyle : 'official';
+    return ''+
+    '<div class="modal-overlay">'+
+      '<div class="modal">'+
+        '<h3>Tournament settings</h3>'+
+        '<p>Changeover pacing for Fast4 matches (Play-In, Round of 16, Quarterfinals).</p>'+
+        '<form id="settingsForm">'+
+          '<div class="radio-group">'+
+            '<label class="radio-option"><input type="radio" name="fast4Changeover" value="official" '+(current==='official'?'checked':'')+'> '+
+              '<span><strong>Official Fast4 Pacing</strong> — switch after every odd game, no sitting down.</span></label>'+
+            '<label class="radio-option"><input type="radio" name="fast4Changeover" value="timesaver" '+(current==='timesaver'?'checked':'')+'> '+
+              '<span><strong>Time-Saver</strong> — switch after every two games, 60-second seated break.</span></label>'+
+          '</div>'+
+          '<div class="row-actions">'+
+            '<button type="button" class="btn btn-outline" data-action="closeModal">Cancel</button>'+
+            '<button type="submit" class="btn btn-primary">Save</button>'+
+          '</div>'+
+        '</form>'+
+      '</div>'+
+    '</div>';
+  }
+
   /* ============================ MAIN RENDER ============================ */
   function render(){
     const app = document.getElementById('app');
@@ -689,19 +1062,26 @@
     else if(view==='setup'){ body = setupScreenHtml(); }
     else if(view==='bracket'){ body = bracketScreenHtml(); }
     else if(view==='match'){ body = matchScreenHtml(); }
+    let modalHtml = '';
+    if(modal==='unlock') modalHtml = unlockModalHtml();
+    else if(modal==='toss') modalHtml = tossModalHtml();
+    else if(modal==='settings') modalHtml = settingsModalHtml();
     app.innerHTML = headerHtml() + body +
       '<footer class="foot">Data is saved on this computer in data.json — everyone on the same network sees live updates.</footer>' +
-      (modal==='unlock' ? unlockModalHtml() : '');
+      modalHtml;
     attachHandlers();
   }
 
   function attachHandlers(){
     const app = document.getElementById('app');
     app.onclick = function(e){
+      if(e.target.classList && e.target.classList.contains('modal-overlay')){
+        window.__actions.closeModal();
+        return;
+      }
       const el = e.target.closest('[data-action]');
       if(!el) return;
       const action = el.getAttribute('data-action');
-      if(action==='modalOverlay'){ window.__actions.closeModal(); return; }
       if(action==='openMatch'){ window.__actions.openMatch(el.getAttribute('data-id')); return; }
       if(action==='backToBracket'){ window.__actions.backToBracket(); return; }
       if(action==='openUnlock'){ window.__actions.openUnlock(); return; }
@@ -709,11 +1089,17 @@
       if(action==='lockOrganizer'){ window.__actions.lockOrganizer(); return; }
       if(action==='point'){ window.__actions.point(el.getAttribute('data-id'), el.getAttribute('data-who')); return; }
       if(action==='undo'){ window.__actions.undo(el.getAttribute('data-id')); return; }
+      if(action==='openToss'){ window.__actions.openToss(el.getAttribute('data-id')); return; }
+      if(action==='clearToss'){ window.__actions.clearToss(el.getAttribute('data-id')); return; }
+      if(action==='saveToss'){ window.__actions.saveToss(); return; }
+      if(action==='openSettings'){ window.__actions.openSettings(); return; }
     };
     const setupForm = document.getElementById('setupForm');
     if(setupForm){ setupForm.onsubmit = function(e){ e.preventDefault(); window.__actions.submitSetup(setupForm); }; }
     const unlockForm = document.getElementById('unlockForm');
     if(unlockForm){ unlockForm.onsubmit = function(e){ e.preventDefault(); window.__actions.submitUnlock(unlockForm); }; }
+    const settingsForm = document.getElementById('settingsForm');
+    if(settingsForm){ settingsForm.onsubmit = function(e){ e.preventDefault(); window.__actions.saveSettings(settingsForm); }; }
   }
 
   /* ============================ INIT ============================ */
